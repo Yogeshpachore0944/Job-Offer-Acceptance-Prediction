@@ -1,0 +1,37 @@
+{
+  "dataset_sha256": "1041e709fa2b7aa47b97fb61c6147b77c7486be31aed280fb8463c4544849778",
+  "models": [
+    {
+      "Model": "Logistic Regression",
+      "Accuracy": 69.91,
+      "Precision": 54.01,
+      "Recall": 62.36,
+      "F1 Score": 57.89,
+      "ROC-AUC": 75.01
+    },
+    {
+      "Model": "Decision Tree",
+      "Accuracy": 68.64,
+      "Precision": 52.2,
+      "Recall": 64.69,
+      "F1 Score": 57.78,
+      "ROC-AUC": 74.22
+    },
+    {
+      "Model": "Random Forest",
+      "Accuracy": 70.82,
+      "Precision": 55.39,
+      "Recall": 61.82,
+      "F1 Score": 58.43,
+      "ROC-AUC": 75.74
+    },
+    {
+      "Model": "XGBoost",
+      "Accuracy": 70.24,
+      "Precision": 54.31,
+      "Recall": 64.71,
+      "F1 Score": 59.06,
+      "ROC-AUC": 75.97
+    }
+  ]
+}
