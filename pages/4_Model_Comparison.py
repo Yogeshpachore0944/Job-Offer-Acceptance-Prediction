@@ -71,5 +71,5 @@ st.subheader("Model selection")
 st.write(
     f"{best_model['Model']} currently leads with an F1 score of "
     f"{best_model['F1 Score']:.2f}% and Accuracy of {best_model['Accuracy']:.2f}%. "
-    "Re-run `train_model.py` after updating the dataset to refresh these saved models and metrics."
+    "Re-run `notebooks/Model_Training.ipynb` after updating the dataset to refresh these saved models and metrics."
 )
