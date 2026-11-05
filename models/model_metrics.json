@@ -3,35 +3,35 @@
   "models": [
     {
       "Model": "Logistic Regression",
-      "Accuracy": 69.91,
-      "Precision": 54.01,
-      "Recall": 62.36,
-      "F1 Score": 57.89,
-      "ROC-AUC": 75.01
+      "Accuracy": 70.08,
+      "Precision": 54.23,
+      "Recall": 62.67,
+      "F1 Score": 58.15,
+      "ROC-AUC": 75.15
     },
     {
       "Model": "Decision Tree",
-      "Accuracy": 68.64,
-      "Precision": 52.2,
-      "Recall": 64.69,
+      "Accuracy": 68.73,
+      "Precision": 52.32,
+      "Recall": 64.51,
       "F1 Score": 57.78,
-      "ROC-AUC": 74.22
+      "ROC-AUC": 74.15
     },
     {
       "Model": "Random Forest",
-      "Accuracy": 70.82,
-      "Precision": 55.39,
-      "Recall": 61.82,
-      "F1 Score": 58.43,
-      "ROC-AUC": 75.74
+      "Accuracy": 70.96,
+      "Precision": 55.59,
+      "Recall": 61.84,
+      "F1 Score": 58.55,
+      "ROC-AUC": 75.81
     },
     {
       "Model": "XGBoost",
-      "Accuracy": 70.24,
-      "Precision": 54.31,
-      "Recall": 64.71,
+      "Accuracy": 69.96,
+      "Precision": 53.89,
+      "Recall": 65.33,
       "F1 Score": 59.06,
-      "ROC-AUC": 75.97
+      "ROC-AUC": 75.91
     }
   ]
 }
