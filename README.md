@@ -2,11 +2,11 @@
 
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.66%2B-FF4B4B.svg)](https://streamlit.io/)
-[![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-1.7%2B-F7931E.svg)](https://scikit-learn.org/)
+[![Scikit-Learn](https://img.shields.io/badge/Scikit--Learn-1.8%2B-F7931E.svg)](https://scikit-learn.org/)
 [![XGBoost](https://img.shields.io/badge/XGBoost-Powered-008080.svg)](https://xgboost.readthedocs.io/)
 [![Dataset](https://img.shields.io/badge/Kaggle-Dataset-20BEFF.svg)](https://www.kaggle.com/datasets/kuldeepjangra/global-ai-hiring-analytics-dataset-2020-2026)
 
-**OfferSense AI** is a production-grade machine learning system and multi-page web application designed for talent acquisition teams, recruitment leaders, and HR analytics specialists. It predicts whether a prospective candidate is likely to **Accept** or **Reject** an employment offer based on candidate expectations, compensation alignment, market competitiveness, and workplace preferences.
+**OfferSense AI** is a machine learning system and interactive multi-page web application designed for talent acquisition teams, recruitment leaders, and HR analytics specialists. It predicts whether a prospective candidate is likely to **Accept** or **Reject** an employment offer based on candidate expectations, compensation alignment, market competitiveness, and workplace preferences.
 
 ---
 
@@ -14,10 +14,11 @@
 - [Project Overview & Business Value](#project-overview--business-value)
 - [Dataset Source & Specification](#dataset-source--specification)
 - [Feature Engineering & Noise Reduction](#feature-engineering--noise-reduction)
-- [Machine Learning Architecture & Modeling](#machine-learning-architecture--modeling)
+- [Machine Learning Architecture & Pipeline](#machine-learning-architecture--pipeline)
+- [Understanding Model Accuracy & Evaluation Insights](#understanding-model-accuracy--evaluation-insights)
 - [Model Performance Benchmark](#model-performance-benchmark)
 - [Streamlit Web Application Modules](#streamlit-web-application-modules)
-- [Jupyter Notebooks](#jupyter-notebooks)
+- [Jupyter Notebooks (Clean Human-Developer Style)](#jupyter-notebooks-clean-human-developer-style)
 - [Project Directory Structure](#project-directory-structure)
 - [Installation & Quick Start](#installation--quick-start)
 - [Tech Stack](#tech-stack)
@@ -26,7 +27,7 @@
 
 ## Project Overview & Business Value
 
-In modern technical recruitment, offer reneging and declined job offers result in substantial financial losses, project timeline disruptions, and wasted recruiter bandwidth. Traditional recruitment lacks quantitative, data-backed risk assessment prior to offer rollout.
+In modern technical recruitment, offer reneging and declined job offers result in substantial financial losses, delayed project timelines, and wasted recruiter bandwidth. Traditional recruitment lacks quantitative, data-backed risk assessment prior to offer rollout.
 
 **OfferSense AI** bridges this gap by:
 1. **Calibrated Offer Risk Assessment**: Calculating accurate acceptance probabilities before extending formal offer letters.
@@ -86,28 +87,74 @@ The clean, production dataset trains on 14 predictive factors:
 
 ---
 
-## Machine Learning Architecture & Modeling
+## Machine Learning Architecture & Pipeline
 
-### 1. Solving Class Imbalance (`scale_pos_weight`)
+### 1. Human-Readable, Standard Preprocessing Pipeline
+The preprocessing and inference architecture follows the industry-standard `ColumnTransformer` + `Pipeline` structure:
+
+```python
+# Numerical Pipeline: Mean Imputation + Standard Scaling
+numerical_pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='mean')),
+    ('scaler', StandardScaler())
+])
+
+# Categorical Pipeline: Mode Imputation + OneHotEncoding
+categorical_pipeline = Pipeline([
+    ('imputer', SimpleImputer(strategy='most_frequent')),
+    ('encoder', OneHotEncoder(handle_unknown='ignore', sparse_output=False))
+])
+
+# Combined ColumnTransformer
+preprocessor = ColumnTransformer([
+    ('numerical', numerical_pipeline, numerical_cols),
+    ('categorical', categorical_pipeline, categorical_cols)
+])
+
+# Full End-to-End Production Pipeline
+production_pipeline = Pipeline([
+    ('preprocessor', preprocessor),
+    ('classifier', XGBClassifier(
+        n_estimators=120,
+        max_depth=5,
+        learning_rate=0.08,
+        scale_pos_weight=scale_pos_weight,
+        random_state=42,
+        eval_metric='logloss'
+    ))
+])
+```
+
+### 2. Solving Class Imbalance (`scale_pos_weight`)
 The dataset exhibits an inherent **66.8% Rejection / 33.2% Acceptance** skew. Default classifiers prioritize the majority class (rejection), yielding low recall on accepted offers (~39%).
 - We incorporated an exact positive class ratio weight:
   $$\text{scale\_pos\_weight} = \frac{N_{\text{negative}}}{N_{\text{positive}}} \approx 2.01$$
 - In linear and tree-based models (`LogisticRegression`, `DecisionTreeClassifier`, `RandomForestClassifier`), `class_weight='balanced'` was applied.
-- This boosted accepted offer recall to **65.5%**, test accuracy to **70.2%**, and ROC-AUC to **76.0%**.
+- This boosted accepted offer recall to **64.9%**, test accuracy to **70.3%**, and ROC-AUC to **75.9%**.
 
-### 2. 5-Fold Stratified Cross-Validation
+### 3. 5-Fold Stratified Cross-Validation
 - Implemented `StratifiedKFold(n_splits=5, shuffle=True, random_state=42)` across all models to ensure every validation fold preserves identical 66.8% / 33.2% class proportions without data leakage.
 
-### 3. Hyperparameter Tuning (RandomizedSearchCV + GridSearchCV)
-- **Stage 1 (RandomizedSearchCV)**: Coarse random exploration across `n_estimators`, `max_depth`, `learning_rate`, `subsample`, and `colsample_bytree`.
+### 4. Hyperparameter Tuning (RandomizedSearchCV + GridSearchCV)
+- **Stage 1 (RandomizedSearchCV)**: Coarse exploration across `n_estimators`, `max_depth`, `learning_rate`, `subsample`, and `colsample_bytree`.
 - **Stage 2 (GridSearchCV)**: Local exhaustive grid search around optimal parameters.
 
-### 4. End-to-End Production Pipeline (`models/pipeline.pkl`)
-- Combines a `ColumnTransformer`:
-  - `StandardScaler()` on all continuous numerical inputs.
-  - `OneHotEncoder(handle_unknown='ignore', sparse_output=False)` on discrete categorical attributes.
-- Chained with the tuned `XGBClassifier(scale_pos_weight=2.01)`.
-- Serialized to [`models/pipeline.pkl`](models/pipeline.pkl) for single-call raw inference.
+---
+
+## Understanding Model Accuracy & Evaluation Insights
+
+### 1. Why Does the Accuracy Top Out Around 70%–74%?
+- **Irreducible Human Uncertainty (Bayes Error Rate)**:
+  In this dataset, even when candidates receive a **large salary surplus (+$10,000 to +$30,000 above their expected salary)**, the actual acceptance rate is **56.5%** (meaning 43.5% still decline).
+  Real-world candidates decline lucrative offers for unobserved personal reasons (competing job offers from rival companies, family relocation constraints, commute distance, or interview culture fit).
+  Because candidates with identical features make different personal choices in the data, **~74% is the mathematical ceiling of raw accuracy** on this feature set.
+
+### 2. The Trade-Off: Balanced 70.3% vs. Unweighted 73.9% Accuracy
+
+| Model Configuration | Accuracy | Precision | Recall on Accepted Offers | F1 Score | Practical Purpose |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Balanced XGBoost (`scale_pos_weight=2.01`)** | **70.28%** | **54.35%** | **64.88%** *(Finds 65% of accepted candidates)* | **59.15%** | **Active & Responsive**: Highly sensitive to salary increases and workplace ratings. (Currently Active) |
+| **Unweighted XGBoost (Default)** | **73.97%** | **68.70%** | **39.53%** *(Misses 60% of accepted candidates)* | **50.18%** | **Conservative**: Maximizes raw accuracy score by predicting "Reject" more frequently. |
 
 ---
 
@@ -117,7 +164,7 @@ Models evaluated on an 80/20 stratified test split (40,000 held-out samples):
 
 | Model | Accuracy (%) | Precision (%) | Recall (%) | F1 Score (%) | ROC-AUC (%) |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **XGBoost Classifier (Best Model / Pipeline)** | **70.24%** | **54.31%** | **64.71%** | **59.06%** | **75.97%** |
+| **XGBoost Classifier (Production Pipeline)** | **70.28%** | **54.35%** | **64.88%** | **59.15%** | **75.91%** |
 | **Random Forest Classifier** | 70.82% | 55.39% | 61.82% | 58.43% | 75.74% |
 | **Logistic Regression** | 69.91% | 54.01% | 62.36% | 57.89% | 75.01% |
 | **Decision Tree Classifier** | 68.64% | 52.20% | 64.69% | 57.78% | 74.22% |
@@ -132,7 +179,7 @@ Models evaluated on an 80/20 stratified test split (40,000 held-out samples):
 
 ## Streamlit Web Application Modules
 
-The application is structured as a multi-page interactive dashboard:
+The application is structured as an interactive multi-page dashboard:
 
 ```
 app.py (Home Dashboard)
@@ -141,12 +188,14 @@ app.py (Home Dashboard)
 ├── 3_Model_Training.py        -> Stratified CV, Hyperparameter Tuning & Pipeline Architecture
 ├── 4_Model_Comparison.py      -> Performance Matrix (F1, Accuracy, ROC-AUC, Radar Charts)
 ├── 5_Prediction.py            -> Real-Time Candidate Scoring & Multi-Model Consensus
-└── 6_Result.py                -> Candidate Decision Dossier & Downloadable PDF/CSV Report
+├── 6_Result.py                -> Candidate Decision Dossier & Downloadable PDF/CSV Report
+├── 7_ATS_Score.py             -> Resume Parsing & ATS Keyword Matching
+└── 8_About.py                 -> Platform Architecture & Engineering Overview
 ```
 
 ### Key UI Features
-- **One-Click Candidate Presets**: Instantly populate the form with:
-  - `Sample Candidate-A (High Acceptance)`: Competitive package and strong company rating.
+- **One-Click Candidate Presets**:
+  - `Sample Candidate-A (High Acceptance)`: Competitive compensation package and strong company rating.
   - `Sample Candidate-B (Offer-at-Risk)`: Below-expectation compensation and startup risk.
   - `Reset to Default (Market Standard)`: Balanced median market profile.
 - **Algorithm Switcher**: Switch real-time inference between the Production Pipeline, Standalone XGBoost, Random Forest, Decision Tree, or Logistic Regression.
@@ -155,22 +204,27 @@ app.py (Home Dashboard)
 
 ---
 
-## Jupyter Notebooks
+## Jupyter Notebooks (Clean Human-Developer Style)
 
 Located in the [`notebooks/`](notebooks/) directory:
 
 1. [`notebooks/EDA.ipynb`](notebooks/EDA.ipynb):
-   - Loading 200,000 rows and filtering out noisy features.
-   - Target distribution and class balance inspection.
-   - Correlation heatmaps, salary gap distributions, and country/company-size acceptance rates.
-   - Statistical feature ranking via ANOVA F-test (`SelectKBest`) and Random Forest feature importances.
+   - Clean, step-by-step Exploratory Data Analysis.
+   - Dataset loading (`pd.read_csv`), shape inspection (`df.shape`, `df.info()`), missing values check.
+   - Dropping 11 noisy features.
+   - Target distribution visualization with `sns.countplot` and percentage tables.
+   - Salary histograms, country acceptance barplots, correlation heatmap.
+   - ANOVA F-Score ranking via `SelectKBest` and Random Forest Gini feature importances.
 
 2. [`notebooks/Model_Training.ipynb`](notebooks/Model_Training.ipynb):
-   - Feature engineering implementation (`salary_hike_pct`, `exp_to_age_ratio`).
-   - Categorical encoding and feature scaling persistence.
-   - 5-Fold Stratified K-Fold cross-validation benchmarking.
-   - Hyperparameter optimization using `RandomizedSearchCV` and `GridSearchCV`.
-   - Construction, fitting, evaluation, and serialization of `models/pipeline.pkl`.
+   - Self-contained, complete model training notebook.
+   - Numerical and categorical preprocessing pipelines (`StandardScaler` + `OneHotEncoder`).
+   - Stratified 5-Fold Cross-Validation.
+   - Baseline model benchmarking and confusion matrix heatmaps.
+   - Two-stage hyperparameter tuning (`RandomizedSearchCV` + `GridSearchCV`).
+   - Assembling and fitting the full `production_pipeline`.
+   - Direct serialization to [`models/pipeline.pkl`](models/pipeline.pkl) and metrics update to `models/model_metrics.json`.
+   - Live inference testing on candidate profiles.
 
 ---
 
@@ -180,7 +234,7 @@ Located in the [`notebooks/`](notebooks/) directory:
 JOB_OFFER_ACCEPTANCE_PREDICTION/
 │
 ├── dataset/
-│   └── job_offer_acceptance_dataset.csv  # Clean 200k record dataset
+│   └── job_offer_acceptance_dataset.csv  # Active dataset (200,000 records)
 │
 ├── models/
 │   ├── best_model.pkl                    # Tuned XGBoost binary
@@ -195,8 +249,8 @@ JOB_OFFER_ACCEPTANCE_PREDICTION/
 │   └── model_metrics.json                # Persisted performance metrics
 │
 ├── notebooks/
-│   ├── EDA.ipynb                         # Exploratory Data Analysis notebook
-│   └── Model_Training.ipynb              # Machine learning training notebook
+│   ├── EDA.ipynb                         # Clean human-style EDA notebook
+│   └── Model_Training.ipynb              # Clean human-style Model Training notebook
 │
 ├── pages/
 │   ├── 1_Dataset.py                      # Dataset summary and feature viewer
@@ -204,11 +258,13 @@ JOB_OFFER_ACCEPTANCE_PREDICTION/
 │   ├── 3_Model_Training.py               # Model training & CV inspection
 │   ├── 4_Model_Comparison.py             # Performance comparison dashboard
 │   ├── 5_Prediction.py                   # Real-time offer acceptance prediction
-│   └── 6_Result.py                       # Final verdict report & export
+│   ├── 6_Result.py                       # Final verdict report & export
+│   ├── 7_ATS_Score.py                    # Resume ATS score evaluator
+│   └── 8_About.py                        # Project architecture & info
 │
 ├── utils/
 │   ├── data_loader.py                    # Dataset and artifact loader utilities
-│   ├── model_evaluation.py               # Evaluation metrics & confusion matrices
+│   ├── model_evaluation.py               # Evaluation metrics & helpers
 │   ├── page_state.py                     # Streamlit multi-page state management
 │   ├── prediction.py                     # HR recommendation logic
 │   └── preprocessing.py                  # Domain feature engineering & encoding
@@ -217,7 +273,6 @@ JOB_OFFER_ACCEPTANCE_PREDICTION/
 │   └── logo.png                          # Brand asset
 │
 ├── app.py                                # Main Streamlit application entry point
-├── train_model.py                        # Standalone model training CLI script
 ├── requirements.txt                      # Project Python dependencies
 └── README.md                             # Comprehensive project documentation
 ```
@@ -253,11 +308,10 @@ cd JOB_OFFER_ACCEPTANCE_PREDICTION
 pip install -r requirements.txt
 ```
 
-### 5. Retrain Models & Pipeline (Optional)
-To retrain models from scratch and update all serialized binaries in `models/`:
-```bash
-python train_model.py
-```
+### 5. Run Model Training (In Jupyter / VS Code)
+All model training, cross-validation, hyperparameter tuning, standard scaling, and serialization to `models/pipeline.pkl` are implemented directly in:
+- Open [`notebooks/Model_Training.ipynb`](notebooks/Model_Training.ipynb) in Jupyter / VS Code.
+- Run all cells to refresh models and metrics.
 
 ### 6. Launch the Streamlit Application
 ```bash
