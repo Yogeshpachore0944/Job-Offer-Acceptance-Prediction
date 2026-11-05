@@ -11,15 +11,10 @@ from utils.data_loader import (
     load_named_model,
     load_pipeline,
     load_scaler,
+    fix_sklearn_compatibility,
 )
 from utils.prediction import hr_recommendation
 from utils.page_state import activate_page
-from utils.preprocessing import (
-    feature_engineering,
-    encode_features,
-    arrange_features,
-    scale_features,
-)
 
 activate_page("5_Prediction")
 
@@ -59,6 +54,7 @@ def load_all_resources():
 
 
 pipeline, best_model, encoders, feature_names, scaler, models_dict = load_all_resources()
+pipe = pipeline
 
 st.markdown("<div class='title'>Job Offer Acceptance Prediction</div>", unsafe_allow_html=True)
 st.markdown(
@@ -279,17 +275,17 @@ if predict:
 
     try:
         with st.spinner(f"Scoring with {selected_model_label}..."):
+            fix_sklearn_compatibility(model_obj)
             if model_kind == "pipeline":
                 pred = int(model_obj.predict(raw_input_df)[0])
                 probs = model_obj.predict_proba(raw_input_df)[0]
             else:
-                # Preprocess for standalone models
-                df_fe = feature_engineering(raw_input_df)
-                df_enc = encode_features(df_fe, encoders)
-                df_arr = arrange_features(df_enc, feature_names)
-                X_sc = scale_features(df_arr, scaler)
-                pred = int(model_obj.predict(X_sc)[0])
-                probs = model_obj.predict_proba(X_sc)[0]
+                # Standalone models were trained on preprocessor-transformed features
+                preprocessor = pipeline.named_steps["preprocessor"]
+                fix_sklearn_compatibility(preprocessor)
+                X_proc = preprocessor.transform(raw_input_df)
+                pred = int(model_obj.predict(X_proc)[0])
+                probs = model_obj.predict_proba(X_proc)[0]
 
             reject_prob = float(probs[0] * 100)
             accept_prob = float(probs[1] * 100)
@@ -339,19 +335,18 @@ if predict:
         # Multi-model cross-comparison on this exact candidate
         with st.expander("Compare Predictions Across All 5 Model Algorithms on This Candidate", expanded=True):
             comparison_rows = []
-            # Prepare preprocessed inputs once
-            df_fe_comp = feature_engineering(raw_input_df)
-            df_enc_comp = encode_features(df_fe_comp, encoders)
-            df_arr_comp = arrange_features(df_enc_comp, feature_names)
-            X_sc_comp = scale_features(df_arr_comp, scaler)
+            preprocessor = pipeline.named_steps["preprocessor"]
+            fix_sklearn_compatibility(preprocessor)
+            X_proc_comp = preprocessor.transform(raw_input_df)
 
             for m_lbl, (m_type, m_inst) in models_dict.items():
+                fix_sklearn_compatibility(m_inst)
                 if m_type == "pipeline":
                     m_p = int(m_inst.predict(raw_input_df)[0])
                     m_prob = m_inst.predict_proba(raw_input_df)[0]
                 else:
-                    m_p = int(m_inst.predict(X_sc_comp)[0])
-                    m_prob = m_inst.predict_proba(X_sc_comp)[0]
+                    m_p = int(m_inst.predict(X_proc_comp)[0])
+                    m_prob = m_inst.predict_proba(X_proc_comp)[0]
 
                 comparison_rows.append({
                     "Algorithm": m_lbl,
